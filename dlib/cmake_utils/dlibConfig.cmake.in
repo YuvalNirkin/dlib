@@ -35,6 +35,9 @@ if(NOT TARGET dlib-shared AND NOT dlib_BINARY_DIR)
     include("${dlib_CMAKE_DIR}/dlib.cmake")
 endif()
 
-find_library(dlib_LIBRARIES dlib HINTS ${dlib_INSTALL_PATH}/lib)
+# These are IMPORTED targets created by dlib.cmake
+set(dlib_LIBRARIES dlib::dlib)
+#find_library(dlib_LIBRARIES dlib HINTS ${dlib_INSTALL_PATH}/lib)
+
 set(dlib_LIBRARIES ${dlib_LIBRARIES} "@dlib_needed_libraries@")
 set(dlib_LIBS      ${dlib_LIBRARIES} "@dlib_needed_libraries@")

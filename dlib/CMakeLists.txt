@@ -7,6 +7,10 @@
 cmake_minimum_required(VERSION 2.8.4)
 project(dlib)
 
+if(WIN32)
+	set(CMAKE_DEBUG_POSTFIX _d)
+endif()
+
 # default to a Release build (except if CMAKE_BUILD_TYPE is set)
 include(cmake_utils/release_build_by_default)
 include(cmake_utils/use_cpp_11.cmake)
@@ -86,19 +90,21 @@ if (NOT TARGET dlib)
    option(DLIB_ENABLE_STACK_TRACE ${DLIB_ENABLE_STACK_TRACE_STR} OFF)
    toggle_preprocessor_switch(DLIB_ENABLE_STACK_TRACE)
 
-   option(DLIB_ENABLE_ASSERTS ${DLIB_ENABLE_ASSERTS_STR} OFF)
-   if(DLIB_ENABLE_ASSERTS)
-      # Set these variables so they are set in the config.h.in file when dlib
-      # is installed.
-      set (DLIB_DISABLE_ASSERTS false)
-      set (ENABLE_ASSERTS true) 
-      add_global_define(ENABLE_ASSERTS)
-   else()
-      # Set these variables so they are set in the config.h.in file when dlib
-      # is installed.
-      set (DLIB_DISABLE_ASSERTS true)
-      set (ENABLE_ASSERTS false) 
-      remove_global_define(ENABLE_ASSERTS)
+   if(NOT WIN32)
+	   option(DLIB_ENABLE_ASSERTS ${DLIB_ENABLE_ASSERTS_STR} ON)
+	   if(DLIB_ENABLE_ASSERTS)
+		  # Set these variables so they are set in the config.h.in file when dlib
+		  # is installed.
+		  set (DLIB_DISABLE_ASSERTS false)
+		  set (ENABLE_ASSERTS true) 
+		  add_global_define(ENABLE_ASSERTS)
+	   else()
+		  # Set these variables so they are set in the config.h.in file when dlib
+		  # is installed.
+		  set (DLIB_DISABLE_ASSERTS true)
+		  set (ENABLE_ASSERTS false) 
+		  remove_global_define(ENABLE_ASSERTS)
+	   endif()
    endif()
 
    if (DLIB_ISO_CPP_ONLY)
