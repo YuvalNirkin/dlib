@@ -21,6 +21,7 @@ namespace dlib
         double min_object_height = 0.25; // cropped object will be at least this fraction of the height of the image.
         double max_object_height = 0.7; // cropped object will be at most this fraction of the height of the image.
         double background_crops_fraction = 0.5;
+        double translate_amount = 0.10;
 
         std::mutex rnd_mutex;
         dlib::rand rnd;
@@ -29,6 +30,17 @@ namespace dlib
         void set_seed (
             time_t seed
         ) { rnd = dlib::rand(seed); }
+
+        double get_translate_amount (
+        ) const { return translate_amount; }
+
+        void set_translate_amount (
+            double value
+        )  
+        { 
+            DLIB_CASSERT(0 <= value);
+            translate_amount = value;
+        }
 
         double get_background_crops_fraction (
         ) const { return background_crops_fraction; }
@@ -72,7 +84,7 @@ namespace dlib
             double value
         ) 
         { 
-            DLIB_CASSERT(0 < value && value < 1);
+            DLIB_CASSERT(0 < value);
             min_object_height = value; 
         }
 
@@ -82,7 +94,7 @@ namespace dlib
             double value
         ) 
         { 
-            DLIB_CASSERT(0 < value && value < 1);
+            DLIB_CASSERT(0 < value);
             max_object_height = value; 
         }
 
@@ -98,12 +110,32 @@ namespace dlib
         )
         {
             DLIB_CASSERT(images.size() == rects.size());
-            crops.resize(num_crops);
-            crop_rects.resize(num_crops);
-            parallel_for(0, num_crops, [&](long i) {
+            crops.clear();
+            crop_rects.clear();
+            append(num_crops, images, rects, crops, crop_rects);
+        }
+
+        template <
+            typename array_type
+            >
+        void append (
+            size_t num_crops,
+            const array_type& images,
+            const std::vector<std::vector<mmod_rect>>& rects,
+            array_type& crops,
+            std::vector<std::vector<mmod_rect>>& crop_rects
+        )
+        {
+            DLIB_CASSERT(images.size() == rects.size());
+            DLIB_CASSERT(crops.size() == crop_rects.size());
+            auto original_size = crops.size();
+            crops.resize(crops.size()+num_crops);
+            crop_rects.resize(crop_rects.size()+num_crops);
+            parallel_for(original_size, original_size+num_crops, [&](long i) {
                 (*this)(images, rects, crops[i], crop_rects[i]);
             });
         }
+
 
         template <
             typename array_type,
@@ -191,8 +223,8 @@ namespace dlib
             {
                 auto rect = rects[randomly_pick_rect(rects)].rect;
                 // perturb the location of the crop by a small fraction of the object's size.
-                const point rand_translate = dpoint(rnd.get_double_in_range(-0.1,0.1)*rect.width(), 
-                    rnd.get_double_in_range(-0.1,0.1)*rect.height());
+                const point rand_translate = dpoint(rnd.get_double_in_range(-translate_amount,translate_amount)*rect.width(), 
+                    rnd.get_double_in_range(-translate_amount,translate_amount)*rect.height());
 
                 // perturb the scale of the crop by a fraction of the object's size
                 const double rand_scale_perturb = rnd.get_double_in_range(min_object_height, max_object_height); 

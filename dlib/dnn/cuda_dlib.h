@@ -5,6 +5,7 @@
 
 
 #include "tensor.h"
+#include "../geometry/rectangle.h"
 
 namespace dlib
 {
@@ -108,6 +109,68 @@ namespace dlib
 
     // -----------------------------------------------------------------------------------
 
+        void inverse_norms (
+            resizable_tensor& invnorms,
+            const tensor& data,
+            const double eps
+        );
+
+        void dot_prods (
+            resizable_tensor& out,
+            const tensor& lhs,
+            const tensor& rhs
+        );
+
+        void scale_columns (
+            tensor& out,
+            const tensor& m,
+            const tensor& v
+        );
+
+        void scale_rows (
+            tensor& out,
+            const tensor& m,
+            const tensor& v
+        );
+
+        void scale_rows2 (
+            float beta, 
+            tensor& out,
+            const tensor& m1,
+            const tensor& m2,
+            const tensor& v1,
+            const tensor& v2
+        );
+
+        void exp (
+            tensor& dest,
+            const tensor& src
+        );
+
+        void log (
+            tensor& dest,
+            const tensor& src
+        );
+
+        void log10 (
+            tensor& dest,
+            const tensor& src
+        );
+
+    // ------------------------------------------------------------------------------------
+
+        void set_tensor (
+            tensor& t,
+            float value
+        );
+
+        void scale_tensor (
+            tensor& t,
+            float value
+        );
+
+    // ------------------------------------------------------------------------------------
+
         void multiply (
             bool add_to,
             tensor& dest,
@@ -183,11 +246,29 @@ namespace dlib
             const float C
         );
 
+        void affine_transform(
+            const rectangle& rect,
+            tensor& dest, 
+            const tensor& src1, 
+            const tensor& src2, 
+            const tensor& src3, 
+            float A, 
+            float B,
+            float C
+        );
+
         // Note that this function isn't in the tt:: namespace because add_scaled() is
         // called by cuda::add() so we don't need a tt:: version of add_scaled().  
         void add_scaled(
             tensor& dest,
             const float scale,
+            const tensor& src
+        );
+
+        void add_cv_to_all_columns(
+            float beta, 
+            tensor& dest, 
+            float alpha, 
             const tensor& src
         );
 

@@ -30,6 +30,8 @@ static const char* cudnn_get_error_string(cudnnStatus_t s)
             return "CUDNN_STATUS_EXECUTION_FAILED";
         case CUDNN_STATUS_NOT_SUPPORTED:
             return "CUDNN_STATUS_NOT_SUPPORTED";
+        case CUDNN_STATUS_ARCH_MISMATCH:
+            return "CUDNN_STATUS_ARCH_MISMATCH: Your GPU is too old and not supported by cuDNN";
         default:
             return "A call to cuDNN failed";
     }
@@ -189,15 +191,13 @@ namespace dlib
             int nc 
         )
         {
-            if (n == 0 || nr == 0 || nc == 0 || k == 0)
+            if (handle)
             {
-                if (handle)
-                {
-                    cudnnDestroyTensorDescriptor((cudnnTensorDescriptor_t)handle);
-                    handle = nullptr;
-                }
+                cudnnDestroyTensorDescriptor((cudnnTensorDescriptor_t)handle);
+                handle = nullptr;
             }
-            else
+
+            if (n != 0 && nr != 0 && nc != 0 && k != 0)
             {
                 cudnnTensorDescriptor_t h;
                 CHECK_CUDNN(cudnnCreateTensorDescriptor(&h));
@@ -258,7 +258,8 @@ namespace dlib
                   (have_same_dimensions(src, dest) ||
                   (src.num_samples()==1 && src.k()==dest.k() && src.nr()==1 && src.nc()==1) ||
                   (src.num_samples()==1 && src.k()==dest.k() && src.nr()==dest.nr() && src.nc()==dest.nc()) ||
-                  (src.num_samples()==1 && src.k()==1 && src.nr()==dest.nr() && src.nc()==dest.nc())) &&
+                  (src.num_samples()==1 && src.k()==1 && src.nr()==dest.nr() && src.nc()==dest.nc()) ||
+                  (src.num_samples()==dest.num_samples() && src.k()==1 && src.nr()==1 && src.nc()==1)) &&
                   is_same_object(src,dest) == false , 
                     "\n\t dest.num_samples(): " << dest.num_samples()
                     <<"\n\t dest.k():           " << dest.k()
@@ -277,6 +278,11 @@ namespace dlib
                 add_scaled(dest, alpha, src);
                 return;
             }
+            else if (src.num_samples()==dest.num_samples() && src.k()==1 && src.nr()==1 && src.nc()==1)
+            {
+                add_cv_to_all_columns(beta, dest, alpha, src);
+                return;
+            }
 
             CHECK_CUDNN(cudnnAddTensor(context(),
                                     &alpha,
@@ -285,32 +291,6 @@ namespace dlib
                                     &beta,
                                     descriptor(dest),
                                     dest.device()));
-        }
-
-        void set_tensor (
-            tensor& t,
-            float value
-        )
-        {
-            if (t.size() == 0)
-                return;
-            CHECK_CUDNN(cudnnSetTensor(context(),
-                                 descriptor(t),
-                                 t.device_write_only(),
-                                 &value));
-        }
-
-        void scale_tensor (
-            tensor& t,
-            float value
-        )
-        {
-            if (t.size() == 0)
-                return;
-            CHECK_CUDNN(cudnnScaleTensor(context(),
-                                   descriptor(t),
-                                   t.device(),
-                                   &value));
         }
 
         void assign_conv_bias_gradient (
@@ -840,6 +820,16 @@ namespace dlib
                                                  filters.nc()));
 
                 CHECK_CUDNN(cudnnCreateConvolutionDescriptor((cudnnConvolutionDescriptor_t*)&conv_handle));
+#if CUDNN_MAJOR >= 6
+                CHECK_CUDNN(cudnnSetConvolution2dDescriptor((cudnnConvolutionDescriptor_t)conv_handle,
+                        padding_y, // vertical padding
+                        padding_x, // horizontal padding
+                        stride_y,
+                        stride_x,
+                        1, 1, // must be 1,1
+                        CUDNN_CROSS_CORRELATION,
+                        CUDNN_DATA_FLOAT)); // could also be CUDNN_CONVOLUTION
+#else
                 CHECK_CUDNN(cudnnSetConvolution2dDescriptor((cudnnConvolutionDescriptor_t)conv_handle,
                         padding_y, // vertical padding
                         padding_x, // horizontal padding
@@ -847,6 +837,7 @@ namespace dlib
                         stride_x,
                         1, 1, // must be 1,1
                         CUDNN_CROSS_CORRELATION)); // could also be CUDNN_CONVOLUTION
+#endif
 
                 CHECK_CUDNN(cudnnGetConvolution2dForwardOutputDim(
                         (const cudnnConvolutionDescriptor_t)conv_handle,

@@ -14,6 +14,23 @@
 
 namespace dlib
 {
+
+// ----------------------------------------------------------------------------------------
+
+    class tensor;
+    namespace cuda
+    {
+        void set_tensor (
+            tensor& t,
+            float value
+        );
+
+        void scale_tensor (
+            tensor& t,
+            float value
+        );
+    }
+
 // ----------------------------------------------------------------------------------------
 
     class tensor
@@ -137,7 +154,7 @@ namespace dlib
             const matrix_exp<EXP>& item
         )
         {
-            DLIB_CASSERT(idx < num_samples());
+            DLIB_CASSERT(idx < (unsigned long)num_samples());
             DLIB_CASSERT(item.size() == nr()*nc()*k());
             static_assert((is_same_type<float, typename EXP::type>::value == true),
                 "To assign a matrix to a tensor the matrix must contain float values");
@@ -190,6 +207,18 @@ namespace dlib
         long m_nc;
         long m_size; // always equal to m_n*m_k*m_nr*m_nc
     };
+
+// ----------------------------------------------------------------------------------------
+
+    inline bool is_vector (
+        const tensor& t
+    )
+    {
+        return t.size() == (size_t)t.num_samples() ||
+               t.size() == (size_t)t.k() ||
+               t.size() == (size_t)t.nr() ||
+               t.size() == (size_t)t.nc();
+    }
 
 // ----------------------------------------------------------------------------------------
 
@@ -292,15 +321,13 @@ namespace dlib
 
         resizable_tensor(const resizable_tensor& item) : _annotation(item.annotation()) 
         {
-            // TODO, do the copy with cuda?
             copy_size(item);
-            std::memcpy(data_instance.host(), item.host(), data_instance.size()*sizeof(float));
+            memcpy(data_instance, item.data_instance);
         }
         resizable_tensor(const tensor& item) : _annotation(item.annotation()) 
         {
-            // TODO, do the copy with cuda?
             copy_size(item);
-            std::memcpy(data_instance.host(), item.host(), data_instance.size()*sizeof(float));
+            memcpy(*this, item);
         }
 
         resizable_tensor(resizable_tensor&& item) { swap(item); }
@@ -539,6 +566,8 @@ namespace dlib
         const tensor& get() const { return inst; }
         operator const tensor& () { return inst; }
 
+        alias_tensor_const_instance(const alias_tensor_instance& item) : inst(item) {}
+
     private:
         alias_tensor_instance inst;
 
@@ -586,7 +615,7 @@ namespace dlib
         alias_tensor_instance operator() (
             tensor& t,
             size_t offset
-        ) 
+        ) const
         {
             DLIB_CASSERT(offset+size() <= t.size());
 
@@ -608,7 +637,7 @@ namespace dlib
         alias_tensor_const_instance operator() (
             const tensor& t,
             size_t offset
-        )
+        ) const
         {
             alias_tensor_const_instance temp;
             temp.inst = (*this)(const_cast<tensor&>(t),offset);
@@ -616,7 +645,7 @@ namespace dlib
         }
 
     private:
-        alias_tensor_instance inst;
+        mutable alias_tensor_instance inst;
     };
 
     inline void serialize(const alias_tensor& item, std::ostream& out)

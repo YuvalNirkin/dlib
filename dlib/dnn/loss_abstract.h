@@ -33,14 +33,16 @@ namespace dlib
 
                 Finally, note that there are two broad flavors of loss layer, supervised
                 and unsupervised.  The EXAMPLE_LOSS_LAYER_ as shown here is a supervised
-                layer.  To make an unsupervised loss you simply leave out the label_type
-                typedef, to_label(), and the truth iterator argument to
+                layer.  To make an unsupervised loss you simply leave out the
+                training_label_type typedef and the truth iterator argument to
                 compute_loss_value_and_gradient().
         !*/
 
     public:
 
-        typedef whatever_type_you_use_for_labels label_type;
+        // In most cases training_label_type and output_label_type will be the same type.
+        typedef whatever_type_you_use_for_training_labels training_label_type;
+        typedef whatever_type_you_use_for_outout_labels   output_label_type;
 
         EXAMPLE_LOSS_LAYER_ (
         );
@@ -77,9 +79,9 @@ namespace dlib
                 - input_tensor.num_samples()%sub.sample_expansion_factor() == 0.
                 - iter == an iterator pointing to the beginning of a range of
                   input_tensor.num_samples()/sub.sample_expansion_factor() elements.  Moreover,
-                  they must be label_type elements.
+                  they must be output_label_type elements.
             ensures
-                - Converts the output of the provided network to label_type objects and
+                - Converts the output of the provided network to output_label_type objects and
                   stores the results into the range indicated by iter.  In particular, for
                   all valid i, it will be the case that:
                     *(iter+i/sub.sample_expansion_factor()) is populated based on the output of
@@ -108,7 +110,7 @@ namespace dlib
                       layer<i>(sub).get_output().
                 - truth == an iterator pointing to the beginning of a range of
                   input_tensor.num_samples()/sub.sample_expansion_factor() elements.  Moreover,
-                  they must be label_type elements.
+                  they must be training_label_type elements.
                 - for all valid i:
                     - *(truth+i/sub.sample_expansion_factor()) is the label of the ith sample in
                       input_tensor.
@@ -167,7 +169,8 @@ namespace dlib
         !*/
     public:
 
-        typedef float label_type;
+        typedef float training_label_type;
+        typedef float output_label_type;
 
         template <
             typename SUB_TYPE,
@@ -234,7 +237,8 @@ namespace dlib
         !*/
     public:
 
-        typedef float label_type;
+        typedef float training_label_type;
+        typedef float output_label_type;
 
         template <
             typename SUB_TYPE,
@@ -306,7 +310,8 @@ namespace dlib
 
     public:
 
-        typedef unsigned long label_type;
+        typedef unsigned long training_label_type;
+        typedef unsigned long output_label_type;
 
         template <
             typename SUB_TYPE,
@@ -443,7 +448,8 @@ namespace dlib
 
     public:
 
-        typedef std::vector<mmod_rect> label_type;
+        typedef std::vector<mmod_rect> training_label_type;
+        typedef std::vector<mmod_rect> output_label_type;
 
         loss_mmod_(
         );
@@ -518,6 +524,248 @@ namespace dlib
 
     template <typename SUBNET>
     using loss_mmod = add_loss_layer<loss_mmod_, SUBNET>;
+
+// ----------------------------------------------------------------------------------------
+
+    class loss_metric_ 
+    {
+        /*!
+            WHAT THIS OBJECT REPRESENTS
+                This object implements the loss layer interface defined above by
+                EXAMPLE_LOSS_LAYER_.  In particular, it allows you to learn to map objects
+                into a vector space where objects sharing the same class label are close to
+                each other, while objects with different labels are far apart.   
+
+                To be specific, it optimizes the following loss function which considers
+                all pairs of objects in a mini-batch and computes a different loss depending 
+                on their respective class labels.  So if objects A1 and A2 in a mini-batch
+                share the same class label then their contribution to the loss is:
+                    max(0, length(A1-A2)-get_distance_threshold() + get_margin())
+
+                While if A1 and B1 have different class labels then their contribution to
+                the loss function is:
+                    max(0, get_distance_threshold()-length(A1-B1) + get_margin())
+
+                Therefore, this loss layer optimizes a version of the hinge loss.
+                Moreover, the loss is trying to make sure that all objects with the same
+                label are within get_distance_threshold() distance of each other.
+                Conversely, if two objects have different labels then they should be more
+                than get_distance_threshold() distance from each other in the learned
+                embedding.  So this loss function gives you a natural decision boundary for
+                deciding if two objects are from the same class.
+
+                Finally, the loss balances the number of negative pairs relative to the
+                number of positive pairs.  Therefore, if there are N pairs that share the
+                same identity in a mini-batch then the algorithm will only include the N
+                worst non-matching pairs in the loss.  That is, the algorithm performs hard
+                negative mining on the non-matching pairs.  This is important since there
+                are in general way more non-matching pairs than matching pairs.  So to
+                avoid imbalance in the loss this kind of hard negative mining is useful.
+        !*/
+    public:
+
+        typedef unsigned long training_label_type;
+        typedef matrix<float,0,1> output_label_type;
+
+        loss_metric_(
+        );
+        /*!
+            ensures
+                - #get_margin() == 0.04
+                - #get_distance_threshold() == 0.6
+        !*/
+
+        loss_metric_(
+            float margin,
+            float dist_thresh
+        );
+        /*!
+            requires
+                - margin > 0
+                - dist_thresh > 0
+            ensures
+                - #get_margin() == margin
+                - #get_distance_threshold() == dist_thresh
+        !*/
+
+        template <
+            typename SUB_TYPE,
+            typename label_iterator
+            >
+        void to_label (
+            const tensor& input_tensor,
+            const SUB_TYPE& sub,
+            label_iterator iter
+        ) const;
+        /*!
+            This function has the same interface as EXAMPLE_LOSS_LAYER_::to_label() except
+            it has the additional calling requirements that: 
+                - sub.get_output().nr() == 1
+                - sub.get_output().nc() == 1
+                - sub.get_output().num_samples() == input_tensor.num_samples()
+                - sub.sample_expansion_factor() == 1
+            This loss expects the network to produce a single vector (per sample) as
+            output.  This vector is the learned embedding.  Therefore, to_label() just
+            copies these output vectors from the network into the output label_iterators
+            given to this function, one for each sample in the input_tensor.
+        !*/
+
+        float get_margin() const; 
+        /*!
+            ensures
+                - returns the margin value used by the loss function.  See the discussion
+                  in WHAT THIS OBJECT REPRESENTS for details.
+        !*/
+
+        float get_distance_threshold() const; 
+        /*!
+            ensures
+                - returns the distance threshold value used by the loss function.  See the discussion
+                  in WHAT THIS OBJECT REPRESENTS for details.
+        !*/
+
+        template <
+            typename const_label_iterator,
+            typename SUBNET
+            >
+        double compute_loss_value_and_gradient (
+            const tensor& input_tensor,
+            const_label_iterator truth, 
+            SUBNET& sub
+        ) const;
+        /*!
+            This function has the same interface as EXAMPLE_LOSS_LAYER_::compute_loss_value_and_gradient() 
+            except it has the additional calling requirements that: 
+                - sub.get_output().nr() == 1
+                - sub.get_output().nc() == 1
+                - sub.get_output().num_samples() == input_tensor.num_samples()
+                - sub.sample_expansion_factor() == 1
+        !*/
+
+    };
+
+    template <typename SUBNET>
+    using loss_metric = add_loss_layer<loss_metric_, SUBNET>;
+
+// ----------------------------------------------------------------------------------------
+
+    class loss_mean_squared_
+    {
+        /*!
+            WHAT THIS OBJECT REPRESENTS
+                This object implements the loss layer interface defined above by
+                EXAMPLE_LOSS_LAYER_.  In particular, it implements the mean squared loss, which is
+                appropriate for regression problems.
+        !*/
+    public:
+
+        typedef float training_label_type;
+        typedef float output_label_type;
+
+        template <
+            typename SUB_TYPE,
+            typename label_iterator
+            >
+        void to_label (
+            const tensor& input_tensor,
+            const SUB_TYPE& sub,
+            label_iterator iter
+        ) const;
+        /*!
+            This function has the same interface as EXAMPLE_LOSS_LAYER_::to_label() except
+            it has the additional calling requirements that:
+                - sub.get_output().nr() == 1
+                - sub.get_output().nc() == 1
+                - sub.get_output().k() == 1
+                - sub.get_output().num_samples() == input_tensor.num_samples()
+                - sub.sample_expansion_factor() == 1
+            and the output label is the predicted continuous variable.
+        !*/
+
+        template <
+            typename const_label_iterator,
+            typename SUBNET
+            >
+        double compute_loss_value_and_gradient (
+            const tensor& input_tensor,
+            const_label_iterator truth,
+            SUBNET& sub
+        ) const;
+        /*!
+            This function has the same interface as EXAMPLE_LOSS_LAYER_::compute_loss_value_and_gradient()
+            except it has the additional calling requirements that:
+                - sub.get_output().nr() == 1
+                - sub.get_output().nc() == 1
+                - sub.get_output().k() == 1
+                - sub.get_output().num_samples() == input_tensor.num_samples()
+                - sub.sample_expansion_factor() == 1
+        !*/
+
+    };
+
+    template <typename SUBNET>
+    using loss_mean_squared = add_loss_layer<loss_mean_squared_, SUBNET>;
+
+// ----------------------------------------------------------------------------------------
+
+    class loss_mean_squared_multioutput_
+    {
+        /*!
+            WHAT THIS OBJECT REPRESENTS
+                This object implements the loss layer interface defined above by
+                EXAMPLE_LOSS_LAYER_.  In particular, it implements the mean squared loss,
+                which is appropriate for regression problems.  It is basically just like
+                loss_mean_squared_ except that it lets you define multiple outputs instead
+                of just 1.
+        !*/
+    public:
+
+        typedef matrix<float> training_label_type;
+        typedef matrix<float> output_label_type;
+
+        template <
+            typename SUB_TYPE,
+            typename label_iterator
+            >
+        void to_label (
+            const tensor& input_tensor,
+            const SUB_TYPE& sub,
+            label_iterator iter
+        ) const;
+        /*!
+            This function has the same interface as EXAMPLE_LOSS_LAYER_::to_label() except
+            it has the additional calling requirements that:
+                - sub.get_output().nr() == 1
+                - sub.get_output().nc() == 1
+                - sub.get_output().num_samples() == input_tensor.num_samples()
+                - sub.sample_expansion_factor() == 1
+            and the output label is the predicted continuous variable.
+        !*/
+
+        template <
+            typename const_label_iterator,
+            typename SUBNET
+            >
+        double compute_loss_value_and_gradient (
+            const tensor& input_tensor,
+            const_label_iterator truth,
+            SUBNET& sub
+        ) const;
+        /*!
+            This function has the same interface as EXAMPLE_LOSS_LAYER_::compute_loss_value_and_gradient()
+            except it has the additional calling requirements that:
+                - sub.get_output().nr() == 1
+                - sub.get_output().nc() == 1
+                - sub.get_output().num_samples() == input_tensor.num_samples()
+                - sub.sample_expansion_factor() == 1
+                - (*(truth + idx)).nc() == 1 for all idx such that 0 <= idx < sub.get_output().num_samples()
+                - (*(truth + idx)).nr() == sub.get_output().k() for all idx such that 0 <= idx < sub.get_output().num_samples()
+        !*/
+
+    };
+
+    template <typename SUBNET>
+    using loss_mean_squared_multioutput = add_loss_layer<loss_mean_squared_multioutput_, SUBNET>;
 
 // ----------------------------------------------------------------------------------------
 

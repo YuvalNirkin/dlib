@@ -319,8 +319,8 @@ namespace dlib
                         ptype temp = temp_img[r-2][c] + 
                                     temp_img[r-1][c]*4 +  
                                     temp_img[r  ][c]*6 +  
-                                    temp_img[r-1][c]*4 +  
-                                    temp_img[r-2][c];  
+                                    temp_img[r+1][c]*4 +  
+                                    temp_img[r+2][c];  
 
                         assign_pixel(down[dr][c],temp/256);
                     }
@@ -443,18 +443,18 @@ namespace dlib
                         temp.red = temp_img[r-2][c].red + 
                                 temp_img[r-1][c].red*4 +  
                                 temp_img[r  ][c].red*6 +  
-                                temp_img[r-1][c].red*4 +  
-                                temp_img[r-2][c].red;  
+                                temp_img[r+1][c].red*4 +  
+                                temp_img[r+2][c].red;  
                         temp.green = temp_img[r-2][c].green + 
                                     temp_img[r-1][c].green*4 +  
                                     temp_img[r  ][c].green*6 +  
-                                    temp_img[r-1][c].green*4 +  
-                                    temp_img[r-2][c].green;  
+                                    temp_img[r+1][c].green*4 +  
+                                    temp_img[r+2][c].green;  
                         temp.blue = temp_img[r-2][c].blue + 
                                     temp_img[r-1][c].blue*4 +  
                                     temp_img[r  ][c].blue*6 +  
-                                    temp_img[r-1][c].blue*4 +  
-                                    temp_img[r-2][c].blue;  
+                                    temp_img[r+1][c].blue*4 +  
+                                    temp_img[r+2][c].blue;  
 
                         down[dr][c].red = temp.red/256;
                         down[dr][c].green = temp.green/256;
@@ -994,6 +994,12 @@ namespace dlib
         DLIB_ASSERT(!is_same_object(img, out_img));
 
         rects.clear();
+        if (num_rows(img)*num_columns(img) == 0)
+        {
+            set_image_size(out_img,0,0);
+            return;
+        }
+
         const long min_height = 5;
         pyramid_type pyr;
         std::vector<matrix<rgb_pixel>> pyramid;
@@ -1022,7 +1028,7 @@ namespace dlib
             // Figure out how far we go on the first column.  We go until the next image can
             // fit next to the previous one, which means we can double back for the second
             // column of images.
-            if (i.nc() <= img.nc()-prev_width-padding && 
+            if (i.nc() <= img.nc()-prev_width-(long)padding && 
                 (height-img.nr())*2 >= (total_height-img.nr()))
             {
                 break;
@@ -1032,7 +1038,7 @@ namespace dlib
         }
         height -= padding; // don't add unnecessary padding to the very right side.
 
-        out_img.set_size(height,img.nc());
+        set_image_size(out_img,height,img.nc());
         assign_all_pixels(out_img, 0);
 
         long y = 0;

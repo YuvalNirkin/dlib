@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
+#include <random>
 #include "../dnn.h"
 
 #include "tester.h"
@@ -339,6 +340,14 @@ namespace
         dlog << LINFO << mat(dest);
         matrix<float> truth1(3,4), truth2(3,4);
 
+        truth1 = 2;
+        DLIB_TEST(max(abs(truth1-mat(src))) < 1e-5);
+        src *= 2;
+        truth1 = 4;
+        DLIB_TEST(max(abs(truth1-mat(src))) < 1e-5);
+        src = 2;
+
+
         truth1 = 7;
         truth2 = 7, 10,  7,  7,
         7, 10,  7,  7,
@@ -595,6 +604,35 @@ namespace
         }
 
         {
+            resizable_tensor A(4,5), B(4);
+
+            tensor_rand rnd;
+            rnd.fill_uniform(A);
+            rnd.fill_uniform(B);
+
+            float alpha = 1.4;
+            float beta = 0.5;
+
+            matrix<float> a(mat(A)), b(mat(B));
+            for (long c = 0; c < a.nc(); ++c)
+            {
+                set_colm(a,c) = beta*colm(a,c) + alpha*b;
+            }
+
+            tt::add(beta, A, alpha, B);
+            DLIB_TEST_MSG(max(abs(mat(A)-a)) < 1e-6, max(abs(mat(A)-a)));
+
+            beta = 0;
+            for (long c = 0; c < a.nc(); ++c)
+            {
+                set_colm(a,c) = beta*colm(a,c) + alpha*b;
+            }
+
+            tt::add(beta, A, alpha, B);
+            DLIB_TEST(max(abs(mat(A)-a)) < 1e-6);
+        }
+
+        {
             resizable_tensor A, B;
             A.set_size(2,3,4,5);
             B.set_size(2,3,4,5);
@@ -654,11 +692,80 @@ namespace
             cpu::add(2, AA, 3, BB);
             DLIB_TEST_MSG(max(abs(mat(A)-mat(AA) )) < 1e-6, max(abs(mat(A)-mat(AA) )));
         }
+
+        {
+            print_spinner();
+            resizable_tensor dest1(123,456), dest2(123,456);
+            resizable_tensor src1(123,456), src2(123,456);
+
+            tt::tensor_rand rnd;
+
+            rnd.fill_uniform(src1); tt::affine_transform(src1, src1, 1, 2); src2 = src1;  // random in range [2, 3]
+            dest1 = exp(mat(src1));
+            tt::exp(dest2, src2);
+            tt::exp(src2, src2); // should work in place
+            DLIB_TEST_MSG(max(abs(mat(dest1)-mat(dest2))) < 1e-5, max(abs(mat(dest1)-mat(dest2))));
+            DLIB_TEST(max(abs(mat(dest1)-mat(src2))) < 1e-5);
+
+            rnd.fill_uniform(src1); tt::affine_transform(src1, src1, 1, 2); src2 = src1;  // random in range [2, 3]
+            dest1 = log(mat(src1));
+            tt::log(dest2, src2);
+            tt::log(src2, src2); // should work in place
+            DLIB_TEST(max(abs(mat(dest1)-mat(dest2))) < 1e-5);
+            DLIB_TEST(max(abs(mat(dest1)-mat(src2))) < 1e-5);
+
+            rnd.fill_uniform(src1); tt::affine_transform(src1, src1, 1, 2); src2 = src1;  // random in range [2, 3]
+            dest1 = log10(mat(src1));
+            tt::log10(dest2, src2);
+            tt::log10(src2, src2); // should work in place
+            DLIB_TEST(max(abs(mat(dest1)-mat(dest2))) < 1e-5);
+            DLIB_TEST(max(abs(mat(dest1)-mat(src2))) < 1e-5);
+
+        }
     }
 
 // ----------------------------------------------------------------------------------------
 
 #ifdef DLIB_USE_CUDA
+
+    void test_affine_rect()
+    {
+        dlib::rand rnd;
+
+        for (int iter = 0; iter < 20; ++iter)
+        {
+
+            long nr = 1 + rnd.get_random_32bit_number()%10;
+            long nc = 1 + rnd.get_random_32bit_number()%10;
+
+            resizable_tensor dest1(nr,nc), dest2(nr,nc), src1(nr,nc), src2(nr,nc), src3(nr,nc);
+            matrix<float> dest3;
+
+            dest1 = 1;
+            dest2 = 1;
+            dest3 = mat(dest1);
+            src1 = 2;
+            src2 = 3;
+            src3 = 4;
+
+            point p1(rnd.get_random_32bit_number()%nc, rnd.get_random_32bit_number()%nr);
+            point p2(rnd.get_random_32bit_number()%nc, rnd.get_random_32bit_number()%nr);
+            rectangle rect(p1,p2);
+
+            cuda::affine_transform(rect, dest1, src1, src2, src3, 2,3,4);
+
+            cpu::affine_transform(rect, dest2, src1, src2, src3, 2,3,4);
+
+            DLIB_TEST(mat(dest1) == mat(dest2));
+
+            set_subm(dest3,rect) = 2*subm(mat(src1),rect) + 3*subm(mat(src2),rect) + 4*subm(mat(src3),rect);
+            DLIB_TEST(dest3 == mat(dest1));
+
+            dest1 = 1;
+            tt::affine_transform(rect, dest1, src1, src2, src3, 2,3,4);
+            DLIB_TEST(dest3 == mat(dest1));
+        }
+    }
 
     void test_conv()
     {
@@ -927,7 +1034,6 @@ namespace
             A = dest;
             B = dest;
 
-            tensor_rand rnd;
             rnd.fill_uniform(dest);
             rnd.fill_uniform(A);
             rnd.fill_uniform(B);
@@ -959,6 +1065,23 @@ namespace
 
             cuda::multiply(false, dest, A, B);
             DLIB_TEST(max(abs(mat(dest)-pointwise_multiply(AA,mat(B)))) < 1e-6); 
+        }
+
+        {
+            resizable_tensor invnorms1, invnorms2;
+            resizable_tensor data(4,5), out1, out2;
+            rnd.fill_uniform(data);
+
+            const double eps = 0.1;
+
+            invnorms2 = reciprocal(sqrt(sum_cols(squared(mat(data))) + eps));
+            tt::inverse_norms(invnorms1, data, eps);
+            DLIB_TEST(max(abs(mat(invnorms1)-mat(invnorms2))) < 1e-6);
+
+            out1.copy_size(data);
+            tt::scale_rows(out1, data, invnorms1);
+            out2 = scale_rows(mat(data), mat(invnorms1));
+            DLIB_TEST(max(abs(mat(out1)-mat(out2))) < 1e-6);
         }
     }
 
@@ -1302,6 +1425,12 @@ namespace
 
     void test_layers()
     {
+        {
+            print_spinner();
+            l2normalize_ l;
+            auto res = test_layer(l);
+            DLIB_TEST_MSG(res, res);
+        }
         {
             print_spinner();
             multiply_ l;
@@ -1678,6 +1807,114 @@ namespace
         error = memcmp(g3.host(), b3g.host(), b3g.size());
         DLIB_TEST(error == 0);
     }
+
+// ----------------------------------------------------------------------------------------
+
+    void test_simple_linear_regression()
+    {
+        const int num_samples = 1000;
+        ::std::vector<matrix<double>> x(num_samples);
+        ::std::vector<float> y(num_samples);
+        ::std::default_random_engine generator(16);
+        ::std::normal_distribution<float> distribution(0,0.1);
+        const float true_intercept = 50.0;
+        const float true_slope = 10.0;
+        for ( int ii = 0; ii < num_samples; ++ii )
+        {
+            const double val = static_cast<double>(ii)/10;
+            matrix<double> tmp(1,1);
+            tmp = val;
+            x[ii] = tmp;
+            y[ii] = (true_intercept + true_slope*static_cast<float>(val) + distribution(generator));
+        }
+
+        using net_type = loss_mean_squared<fc<1, input<matrix<double>>>>;
+        net_type net;
+        layer<1>(net).layer_details().set_bias_learning_rate_multiplier(300);
+        sgd defsolver(0,0.9);
+        dnn_trainer<net_type> trainer(net, defsolver);
+        trainer.set_learning_rate(1e-5);
+        trainer.set_min_learning_rate(1e-6);
+        trainer.set_mini_batch_size(50);
+        trainer.set_max_num_epochs(170);
+        trainer.train(x, y);
+
+        const float slope = layer<1>(net).layer_details().get_weights().host()[0];
+        const float slope_error = abs(true_slope - slope);
+        const float intercept = layer<1>(net).layer_details().get_biases().host()[0];
+        const float intercept_error = abs(true_intercept - intercept);
+        const float eps_slope = 0.05, eps_intercept = 0.1;
+
+        DLIB_TEST_MSG(slope_error <= eps_slope,
+                      "Expected slope = " << true_slope << " Estimated slope = " << slope << " Error limit = " << eps_slope);
+        DLIB_TEST_MSG(intercept_error <= eps_intercept,
+                      "Expected intercept = " << true_intercept << " Estimated intercept = " << intercept << " Error limit = " << eps_intercept);
+
+    }
+
+// ----------------------------------------------------------------------------------------
+
+    void test_multioutput_linear_regression()
+    {
+        const int num_outputs = 2;
+        const int num_samples = 1000;
+        ::std::vector<matrix<double>> x(num_samples);
+        ::std::vector<matrix<float>> y(num_samples);
+        ::std::default_random_engine generator(16);
+        ::std::normal_distribution<float> distribution(0,0.1);
+        ::std::normal_distribution<float> slope_distribution(10,5);
+        ::std::normal_distribution<float> intercept_distribution(50,10);
+        ::std::vector<float> true_intercepts(num_outputs);
+        ::std::vector<float> true_slopes(num_outputs);
+        for ( int jj = 0; jj < num_outputs; ++jj )
+        {
+            true_slopes[jj] = slope_distribution(generator);
+            true_intercepts[jj] = intercept_distribution(generator);
+        }
+        matrix<float> ytmp(num_outputs, 1);
+        for ( int ii = 0; ii < num_samples; ++ii )
+        {
+            const double val = static_cast<double>(ii)/10;
+            matrix<double> tmp(1,1);
+            tmp = val;
+            x[ii] = tmp;
+            for ( int jj = 0; jj < num_outputs; ++jj )
+                ytmp(jj, 0) = (true_intercepts[jj] + true_slopes[jj]*static_cast<float>(val) + distribution(generator));
+
+            y[ii] = ytmp;
+        }
+
+        using net_type = loss_mean_squared_multioutput<fc<num_outputs, input<matrix<double>>>>;
+        net_type net;
+        layer<1>(net).layer_details().set_bias_learning_rate_multiplier(900);
+        sgd defsolver(0,0.9);
+        dnn_trainer<net_type> trainer(net, defsolver);
+        trainer.set_learning_rate(1e-5);
+        trainer.set_min_learning_rate(1e-6);
+        trainer.set_mini_batch_size(50);
+        trainer.set_max_num_epochs(170);
+        trainer.train(x, y);
+
+        float slope_error = 0.0;
+        float intercept_error = 0.0;
+        const float eps_slope = 0.05, eps_intercept = 0.1;
+
+        for ( int jj = 0; jj < num_outputs; ++jj )
+        {
+            slope_error += abs(layer<1>(net).layer_details().get_weights().host()[jj] - true_slopes[jj]);
+            intercept_error += abs(layer<1>(net).layer_details().get_biases().host()[jj] - true_intercepts[jj]);
+        }
+
+        slope_error /= float(num_outputs);
+        intercept_error /= float(num_outputs);
+
+        DLIB_TEST_MSG(slope_error <= eps_slope,
+                      "Average absolute slope error = " << slope_error << " Error limit = " << eps_slope);
+        DLIB_TEST_MSG(intercept_error <= eps_intercept,
+                      "Average absolute intercept error = " << intercept_error << " Error limit = " << eps_intercept);
+
+    }
+
 // ----------------------------------------------------------------------------------------
 
     class dnn_tester : public tester
@@ -1697,6 +1934,7 @@ namespace
 
             test_tagging();
 #ifdef DLIB_USE_CUDA
+            test_affine_rect();
             test_conv();
             test_more_ops2();
             test_more_ops(1,1);
@@ -1745,6 +1983,8 @@ namespace
             test_visit_funcions();
             test_copy_tensor_cpu();
             test_concat();
+            test_simple_linear_regression();
+            test_multioutput_linear_regression();
         }
 
         void perform_test()

@@ -347,6 +347,20 @@ namespace dlib
 
 // ----------------------------------------------------------------------------------------
 
+    bool is_vector (
+        const tensor& t
+    );
+    /*!
+        ensures
+            - returns true if and only if one of the following is true:
+                - t.size() == t.num_samples() 
+                - t.size() == t.k() 
+                - t.size() == t.nr() 
+                - t.size() == t.nc()
+    !*/
+
+// ----------------------------------------------------------------------------------------
+
     const matrix_exp mat (
         const tensor& t,
         long nr,
@@ -587,6 +601,9 @@ namespace dlib
 
     public:
 
+        // non-const alias tensors are convertible to const ones.
+        alias_tensor_const_instance(const alias_tensor_instance& item); 
+
         // Methods that cast the alias to a tensor.
         const tensor& get() const;
         operator const tensor& (); 
@@ -646,7 +663,7 @@ namespace dlib
         alias_tensor_instance operator() (
             tensor& t,
             size_t offset
-        );
+        ) const;
         /*!
             requires
                 - offset+size() <= t.size()
@@ -667,7 +684,7 @@ namespace dlib
         alias_tensor_const_instance operator() (
             const tensor& t,
             size_t offset
-        );
+        ) const;
         /*!
             requires
                 - offset+size() <= t.size()
