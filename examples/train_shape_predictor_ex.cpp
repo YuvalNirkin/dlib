@@ -88,8 +88,11 @@ int main(int argc, char** argv)
         // tool which can be found in the tools/imglab folder.  It is a simple
         // graphical tool for labeling objects in images.  To see how to use it
         // read the tools/imglab/README.txt file.
+		std::cout << "Loading train images..." << std::endl;
         load_image_dataset(images_train, faces_train, faces_directory+"/training_with_face_landmarks.xml");
-        load_image_dataset(images_test, faces_test, faces_directory+"/testing_with_face_landmarks.xml");
+		std::cout << "Loading test images..." << std::endl;
+		load_image_dataset(images_test, faces_test, faces_directory + "/testing_with_face_landmarks.xml");
+		std::cout << "Training..." << std::endl;
 
         // Now make the object responsible for training the model.  
         shape_predictor_trainer trainer;
